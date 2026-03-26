@@ -12,7 +12,7 @@ interface Props {
 
 export function GoalForm({ onSubmit, isSubmitting, error }: Props) {
   const [goal, setGoal] = useState("");
-  const [category, setCategory] = useState(CATEGORIES[0].value);
+  const [category, setCategory] = useState<string>(CATEGORIES[0].value);
   const [numStages, setNumStages] = useState(6);
 
   function handleSubmit(e: React.FormEvent) {
