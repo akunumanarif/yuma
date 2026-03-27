@@ -47,7 +47,7 @@ Intermediate stages show smooth incremental progress.
 Keep camera angle and scene layout IDENTICAL across all stages."""
 
     response = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-haiku-4-5-20251001",
         max_tokens=3000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
