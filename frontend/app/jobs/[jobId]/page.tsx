@@ -24,7 +24,8 @@ export default function JobPage({ params }: Props) {
     fetchJob(jobId)
       .then(setJob)
       .catch(() => router.push("/generate"));
-  }, [jobId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   const isCompleted = progress?.status === "completed";
   const isFailed = progress?.status === "failed";
