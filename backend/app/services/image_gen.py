@@ -27,13 +27,11 @@ async def text_to_image(prompt: str, negative_prompt: str, local_path: Path) -> 
         "fal-ai/flux/dev",
         arguments={
             "prompt": prompt,
-            "negative_prompt": negative_prompt,
             "image_size": settings.flux_image_size,
             "num_inference_steps": 28,
             "guidance_scale": 3.5,
             "num_images": 1,
             "enable_safety_checker": False,
-            "output_format": "png",
         },
     )
     result = await handler.get()
@@ -63,7 +61,6 @@ async def image_to_image(
             "guidance_scale": 3.5,
             "num_images": 1,
             "enable_safety_checker": False,
-            "output_format": "png",
         },
     )
     result = await handler.get()
