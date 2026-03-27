@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import httpx
 from pathlib import Path
@@ -21,49 +22,31 @@ async def _download_file(url: str, local_path: Path) -> Path:
 
 
 @retry(max_attempts=3, backoff_base=2.0, retryable_exceptions=(Exception,))
-async def text_to_image(prompt: str, negative_prompt: str, local_path: Path) -> tuple[Path, str]:
-    """Returns (local_path, fal_cdn_url) so the URL can be reused for img2img."""
-    logger.info(f"text_to_image: {prompt[:60]}...")
+async def generate_frame(prompt: str, local_path: Path) -> Path:
+    """Text-to-image for all frames using fal-ai/flux/schnell (fast & cheap)."""
+    logger.info(f"generate_frame: {prompt[:60]}...")
     handler = await fal_client.submit_async(
-        "fal-ai/flux/dev",
+        "fal-ai/flux/schnell",
         arguments={
             "prompt": prompt,
             "image_size": settings.flux_image_size,
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
+            "num_inference_steps": 4,
             "num_images": 1,
             "enable_safety_checker": False,
         },
     )
     result = await handler.get()
     image_url = result["images"][0]["url"]
-    local = await _download_file(image_url, local_path)
-    return local, image_url
+    return await _download_file(image_url, local_path)
 
 
-@retry(max_attempts=3, backoff_base=2.0, retryable_exceptions=(Exception,))
-async def image_to_image(
-    prompt: str,
-    negative_prompt: str,
-    source_url: str,
-    local_path: Path,
-    strength: float = 0.70,
-) -> tuple[Path, str]:
-    """Use fal CDN URL directly — no re-upload needed. Returns (local_path, fal_cdn_url)."""
-    logger.info(f"image_to_image (strength={strength}): {prompt[:60]}...")
-    handler = await fal_client.submit_async(
-        "fal-ai/flux/dev/image-to-image",
-        arguments={
-            "prompt": prompt,
-            "image_url": source_url,
-            "strength": strength,
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
-            "num_images": 1,
-            "enable_safety_checker": False,
-        },
-    )
-    result = await handler.get()
-    image_url_out = result["images"][0]["url"]
-    local = await _download_file(image_url_out, local_path)
-    return local, image_url_out
+async def generate_all_frames(prompts: list[tuple[int, str]], job_id: str) -> dict[int, Path]:
+    """Generate all frames in parallel."""
+    from app.utils.file_manager import get_frame_path
+
+    async def _gen(index: int, prompt: str) -> tuple[int, Path]:
+        path = await generate_frame(prompt, get_frame_path(job_id, index))
+        return index, path
+
+    results = await asyncio.gather(*[_gen(i, p) for i, p in prompts])
+    return dict(results)

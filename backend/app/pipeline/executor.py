@@ -71,51 +71,26 @@ async def _run_pipeline(job: Job):
 
     await _emit(job, f"Scene planned: {len(job.stages)} stages", 10)
 
-    # ── Phase 2: ANCHOR FRAME (stage 0) ───────────────────────────────────────
+    # ── Phase 2: ALL FRAMES IN PARALLEL ───────────────────────────────────────
     job.status = JobStatus.GENERATING_FRAMES
     num_stages = len(job.stages)
-    frame_progress_step = 40 / num_stages
+    await _emit(job, f"Generating {num_stages} keyframes in parallel...", 15)
+
+    try:
+        prompts = [(i, stage.prompt) for i, stage in enumerate(job.stages)]
+        frame_map = await image_gen.generate_all_frames(prompts, job.id)
+    except RetryExhausted as e:
+        job.status = JobStatus.FAILED
+        job.error_message = f"Frame generation failed: {e}"
+        await _emit(job, job.error_message, 15, error=job.error_message)
+        return
 
     for i, stage in enumerate(job.stages):
-        stage.status = StageStatus.IN_PROGRESS
-        progress = int(10 + frame_progress_step * i)
-        await _emit(job, f"Generating frame {i + 1}/{num_stages}: {stage.title}", progress, i)
-
-        frame_path = get_frame_path(job.id, i)
-
-        try:
-            if i == 0:
-                _, fal_url = await image_gen.text_to_image(
-                    prompt=stage.prompt,
-                    negative_prompt=stage.negative_prompt,
-                    local_path=frame_path,
-                )
-                job.stages[i].fal_cdn_url = fal_url
-            else:
-                prev_url = job.stages[i - 1].fal_cdn_url
-                if not prev_url:
-                    raise ValueError(f"No fal URL for previous frame {i - 1}")
-                _, fal_url = await image_gen.image_to_image(
-                    prompt=stage.prompt,
-                    negative_prompt=stage.negative_prompt,
-                    source_url=prev_url,
-                    local_path=frame_path,
-                    strength=stage.img2img_strength,
-                )
-                job.stages[i].fal_cdn_url = fal_url
-        except RetryExhausted as e:
-            stage.status = StageStatus.FAILED
-            job.status = JobStatus.FAILED
-            job.error_message = f"Frame {i} generation failed: {e}"
-            await _emit(job, job.error_message, progress, i, error=job.error_message)
-            return
-
-        stage.keyframe_local_path = str(frame_path)
-        # Use local path as URL for now; can be replaced with CDN URL
+        stage.keyframe_local_path = str(frame_map[i])
         stage.keyframe_url = f"/api/jobs/{job.id}/frames/{i}"
         stage.status = StageStatus.COMPLETED
-        progress = int(10 + frame_progress_step * (i + 1))
-        await _emit(job, f"Frame {i + 1}/{num_stages} ready", progress, i)
+
+    await _emit(job, f"All {num_stages} keyframes ready!", 50)
 
     # ── Phase 3: VIDEO CLIPS (parallel) ───────────────────────────────────────
     job.status = JobStatus.GENERATING_CLIPS
