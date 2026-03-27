@@ -1,78 +1,102 @@
-import json
 import logging
-import re
-from anthropic import AsyncAnthropic
-
-from app.config import settings
 from app.models.job import SceneStage
 
 logger = logging.getLogger(__name__)
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=120.0)
+# Stage progression templates per category
+CATEGORY_TEMPLATES = {
+    "room_cleaning": [
+        ("Complete Mess", "extremely cluttered and dirty, clothes piled everywhere, trash on floor, complete disorder"),
+        ("Starting Cleanup", "beginning to clean, some items being sorted, trash bags visible, slight improvement"),
+        ("Half Cleaned", "room half cleaned, floor partially visible, items being organized, progress visible"),
+        ("Mostly Clean", "mostly clean room, furniture visible, items organized, only minor clutter remains"),
+        ("Fully Clean", "completely clean and tidy room, everything in place, fresh and organized"),
+        ("New Interior", "clean modern room with new decor, stylish furniture arrangement, beautiful interior design"),
+    ],
+    "construction": [
+        ("Empty Land", "empty plot of land or demolished site, bare ground, construction materials nearby"),
+        ("Foundation", "foundation being laid, concrete work in progress, basic structure emerging"),
+        ("Framework", "structural framework erected, walls taking shape, construction crew working"),
+        ("Walls & Roof", "walls completed, roof structure in place, building taking final shape"),
+        ("Interior Work", "interior finishing work, windows installed, painting and flooring in progress"),
+        ("Complete Building", "fully completed modern building, beautiful architecture, professional finish"),
+    ],
+    "car_cleaning": [
+        ("Very Dirty Car", "extremely dirty car covered in mud and grime, dusty windows, neglected exterior"),
+        ("Rinsing", "car being rinsed with water, dirt starting to wash off, hose spraying"),
+        ("Soap & Scrub", "car being scrubbed with soap and sponge, foam covering the surface"),
+        ("Rinsing Off", "soap being rinsed off, car surface becoming visible, water running clean"),
+        ("Drying", "car being dried with microfiber towels, surface gleaming, almost done"),
+        ("Showroom Clean", "perfectly clean and polished car, mirror-like shine, showroom condition"),
+    ],
+    "carpet_cleaning": [
+        ("Dirty Carpet", "heavily stained and dirty carpet, visible grime, discolored patches throughout"),
+        ("Vacuuming", "carpet being vacuumed, loose dirt being removed, vacuum cleaner in action"),
+        ("Applying Solution", "cleaning solution being applied to stains, spray bottle and scrub brush visible"),
+        ("Scrubbing", "carpet being scrubbed vigorously, foam forming, stains lifting"),
+        ("Steam Cleaning", "professional steam cleaner extracting dirt, carpet becoming visibly cleaner"),
+        ("Clean Carpet", "perfectly clean carpet, vibrant colors restored, fresh and spotless appearance"),
+    ],
+    "garden": [
+        ("Overgrown Garden", "completely overgrown garden, weeds everywhere, neglected plants, wild vegetation"),
+        ("Clearing", "garden being cleared, dead plants removed, weeds being pulled, tools in use"),
+        ("Soil Preparation", "soil being tilled and prepared, garden beds taking shape, fresh earth"),
+        ("Planting", "new plants being planted, seeds being sown, organized garden rows visible"),
+        ("Growing", "plants growing well, garden taking shape, greenery emerging, tended appearance"),
+        ("Beautiful Garden", "stunning landscaped garden in full bloom, colorful flowers, lush greenery"),
+    ],
+    "renovation": [
+        ("Old Room", "outdated and worn room, old furniture, peeling paint, dated decor"),
+        ("Demolition", "renovation in progress, old fixtures being removed, walls being stripped"),
+        ("Structural Work", "new walls or structures being built, raw construction state, bare materials"),
+        ("Painting & Flooring", "fresh paint being applied, new flooring being installed, room transforming"),
+        ("Fixtures & Fittings", "new fixtures installed, lighting added, furniture being placed"),
+        ("Renovated Room", "completely renovated modern room, fresh design, beautiful new interior"),
+    ],
+    "other": [
+        ("Before - Initial State", "initial state before transformation, starting condition"),
+        ("Early Progress", "early stage of transformation, subtle changes beginning"),
+        ("Quarter Way", "transformation 25% complete, noticeable changes visible"),
+        ("Halfway", "transformation 50% complete, significant progress made"),
+        ("Almost Done", "transformation nearly complete, final touches being applied"),
+        ("Final Result", "transformation fully complete, impressive final result"),
+    ],
+}
 
-SYSTEM_PROMPT = """You are a visual scene planner for AI timelapse videos.
-Given a transformation goal, you produce a series of keyframe descriptions
-that show a smooth, realistic progression. Each stage should be visually
-distinct from the previous, with ~15-20% transformation per step.
+STYLE_PREFIX = (
+    "Photorealistic photography, DSLR camera, natural lighting, "
+    "fixed camera angle, wide shot, high detail, 8k resolution. "
+)
 
-CRITICAL RULES for image prompts:
-- Always include: lighting conditions, camera angle, time of day
-- Maintain consistent: room/environment layout, camera position, art style
-- Be specific about what HAS changed vs what stays the same
-- Use photorealistic style descriptors consistently across all stages
-- Include negative prompts to prevent style drift
-- Write prompts in English only"""
+
+def _build_prompt(stage_desc: str, goal: str) -> str:
+    # Extract scene context from the goal (first part before →)
+    scene_context = goal.split("→")[0].strip() if "→" in goal else goal
+    # Keep it concise — just combine style + stage description + scene context
+    return f"{STYLE_PREFIX}{stage_desc}. Scene: {scene_context[:120]}."
 
 
 async def plan_scene(goal: str, category: str, num_stages: int) -> list[SceneStage]:
-    user_message = f"""Create {num_stages} keyframe descriptions for this timelapse:
-Goal: {goal}
-Category: {category}
+    templates = CATEGORY_TEMPLATES.get(category, CATEGORY_TEMPLATES["other"])
 
-Return ONLY a valid JSON array (no markdown, no explanation) with this exact structure:
-[
-  {{
-    "index": 0,
-    "title": "Stage name (3-5 words)",
-    "description": "What the viewer sees (1-2 sentences)",
-    "prompt": "Detailed FLUX image generation prompt (50-100 words). Must include: photorealistic photography, consistent camera angle, lighting conditions.",
-    "negative_prompt": "blurry, cartoon, anime, painting, different room, different angle, inconsistent lighting",
-    "img2img_strength": 0.70
-  }}
-]
+    # Select evenly spaced stages to match num_stages
+    if num_stages >= len(templates):
+        selected = templates
+    else:
+        step = (len(templates) - 1) / (num_stages - 1)
+        selected = [templates[round(i * step)] for i in range(num_stages)]
 
-Stage 0 = starting state (e.g., most messy/unbuilt).
-Stage {num_stages - 1} = final state (e.g., fully clean/built).
-Intermediate stages show smooth incremental progress.
-Keep camera angle and scene layout IDENTICAL across all stages."""
+    stages = []
+    for i, (title, desc) in enumerate(selected):
+        strength = 0.60 if i == 1 else 0.70  # first img2img slightly lower
+        stages.append(SceneStage(
+            index=i,
+            title=title,
+            description=desc,
+            prompt=_build_prompt(desc, goal),
+            negative_prompt="",
+            img2img_strength=strength,
+        ))
 
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=3000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
-
-    raw_text = response.content[0].text.strip()
-    json_data = _extract_json(raw_text)
-    stages = [SceneStage(**s) for s in json_data]
-    logger.info(f"Planned {len(stages)} stages for goal: {goal[:50]}")
+    logger.info(f"Template planner: {len(stages)} stages for category '{category}'")
     return stages
-
-
-def _extract_json(text: str) -> list:
-    # Try direct parse first
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    # Extract JSON array from markdown code block or surrounding text
-    match = re.search(r'\[[\s\S]*\]', text)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-
-    raise ValueError(f"Could not parse JSON from planner response: {text[:200]}")
