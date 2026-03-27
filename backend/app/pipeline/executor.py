@@ -34,6 +34,9 @@ async def _emit(job: Job, message: str, progress: int, stage_index: int = None, 
 
 
 async def execute_pipeline(job_id: str):
+    task = asyncio.current_task()
+    if task:
+        job_store.register_task(job_id, task)
     async with _pipeline_semaphore:
         job = await job_store.get_job(job_id)
         if not job:

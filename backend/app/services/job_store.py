@@ -14,12 +14,16 @@ class JobStore:
     def __init__(self):
         self._jobs: dict[str, Job] = {}
         self._queues: dict[str, asyncio.Queue] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
 
     async def create_job(self, job: Job) -> None:
         async with self._lock:
             self._jobs[job.id] = job
             self._queues[job.id] = asyncio.Queue(maxsize=200)
+
+    def register_task(self, job_id: str, task: asyncio.Task) -> None:
+        self._tasks[job_id] = task
 
     async def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
@@ -40,6 +44,12 @@ class JobStore:
     async def subscribe(self, job_id: str) -> Optional[asyncio.Queue]:
         return self._queues.get(job_id)
 
+    async def cancel_job(self, job_id: str) -> bool:
+        task = self._tasks.get(job_id)
+        if task and not task.done():
+            task.cancel()
+        return await self.delete_job(job_id)
+
     async def delete_job(self, job_id: str) -> bool:
         async with self._lock:
             if job_id not in self._jobs:
@@ -47,6 +57,8 @@ class JobStore:
             del self._jobs[job_id]
             if job_id in self._queues:
                 del self._queues[job_id]
+            if job_id in self._tasks:
+                del self._tasks[job_id]
         cleanup_job_dir(job_id)
         return True
 

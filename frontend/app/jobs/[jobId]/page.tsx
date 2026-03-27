@@ -6,7 +6,7 @@ import { useJobProgress } from "@/hooks/useJobProgress";
 import { PipelineProgress } from "@/components/Pipeline";
 import { KeyframeGallery } from "@/components/Keyframes";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { fetchJob } from "@/lib/api";
+import { fetchJob, cancelJob } from "@/lib/api";
 import type { Job } from "@/lib/types";
 
 interface Props {
@@ -43,7 +43,20 @@ export default function JobPage({ params }: Props) {
       </div>
 
       {progress && !isCompleted && (
-        <PipelineProgress progress={progress} />
+        <>
+          <PipelineProgress progress={progress} />
+          {!isFailed && (
+            <button
+              onClick={async () => {
+                await cancelJob(jobId);
+                router.push("/generate");
+              }}
+              className="text-sm text-gray-500 hover:text-red-400 transition-colors underline"
+            >
+              Cancel
+            </button>
+          )}
+        </>
       )}
 
       {sseError && !progress && (

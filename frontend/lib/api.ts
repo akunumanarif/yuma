@@ -33,3 +33,7 @@ export function getVideoUrl(jobId: string): string {
 export function getFrameUrl(jobId: string, frameIndex: number): string {
   return `${API_URL}/api/jobs/${jobId}/frames/${frameIndex}`;
 }
+
+export async function cancelJob(jobId: string): Promise<void> {
+  await fetch(`${API_URL}/api/jobs/${jobId}`, { method: "DELETE" });
+}

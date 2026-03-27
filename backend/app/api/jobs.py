@@ -65,6 +65,6 @@ async def get_frame(job_id: str, frame_index: int):
 
 @router.delete("/{job_id}", status_code=204)
 async def delete_job(job_id: str):
-    deleted = await job_store.delete_job(job_id)
+    deleted = await job_store.cancel_job(job_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Job not found")
