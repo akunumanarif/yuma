@@ -8,7 +8,7 @@ from app.models.job import SceneStage
 
 logger = logging.getLogger(__name__)
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
 SYSTEM_PROMPT = """You are a visual scene planner for AI timelapse videos.
 Given a transformation goal, you produce a series of keyframe descriptions
