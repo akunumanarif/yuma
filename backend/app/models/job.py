@@ -31,6 +31,7 @@ class SceneStage(BaseModel):
     img2img_strength: float = 0.70
     keyframe_url: Optional[str] = None
     keyframe_local_path: Optional[str] = None
+    fal_cdn_url: Optional[str] = None
     status: StageStatus = StageStatus.PENDING
 
 

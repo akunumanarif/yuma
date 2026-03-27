@@ -21,7 +21,8 @@ async def _download_file(url: str, local_path: Path) -> Path:
 
 
 @retry(max_attempts=3, backoff_base=2.0, retryable_exceptions=(Exception,))
-async def text_to_image(prompt: str, negative_prompt: str, local_path: Path) -> Path:
+async def text_to_image(prompt: str, negative_prompt: str, local_path: Path) -> tuple[Path, str]:
+    """Returns (local_path, fal_cdn_url) so the URL can be reused for img2img."""
     logger.info(f"text_to_image: {prompt[:60]}...")
     handler = await fal_client.submit_async(
         "fal-ai/flux/dev",
@@ -36,26 +37,25 @@ async def text_to_image(prompt: str, negative_prompt: str, local_path: Path) -> 
     )
     result = await handler.get()
     image_url = result["images"][0]["url"]
-    return await _download_file(image_url, local_path)
+    local = await _download_file(image_url, local_path)
+    return local, image_url
 
 
 @retry(max_attempts=3, backoff_base=2.0, retryable_exceptions=(Exception,))
 async def image_to_image(
     prompt: str,
     negative_prompt: str,
-    source_path: Path,
+    source_url: str,
     local_path: Path,
     strength: float = 0.70,
-) -> Path:
+) -> tuple[Path, str]:
+    """Use fal CDN URL directly — no re-upload needed. Returns (local_path, fal_cdn_url)."""
     logger.info(f"image_to_image (strength={strength}): {prompt[:60]}...")
-    # Upload source image to fal CDN
-    image_url = await fal_client.upload_file_async(str(source_path))
-
     handler = await fal_client.submit_async(
         "fal-ai/flux/dev/image-to-image",
         arguments={
             "prompt": prompt,
-            "image_url": image_url,
+            "image_url": source_url,
             "strength": strength,
             "num_inference_steps": 28,
             "guidance_scale": 3.5,
@@ -65,4 +65,5 @@ async def image_to_image(
     )
     result = await handler.get()
     image_url_out = result["images"][0]["url"]
-    return await _download_file(image_url_out, local_path)
+    local = await _download_file(image_url_out, local_path)
+    return local, image_url_out

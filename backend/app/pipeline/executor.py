@@ -82,20 +82,24 @@ async def _run_pipeline(job: Job):
 
         try:
             if i == 0:
-                await image_gen.text_to_image(
+                _, fal_url = await image_gen.text_to_image(
                     prompt=stage.prompt,
                     negative_prompt=stage.negative_prompt,
                     local_path=frame_path,
                 )
+                job.stages[i].fal_cdn_url = fal_url
             else:
-                prev_path = get_frame_path(job.id, i - 1)
-                await image_gen.image_to_image(
+                prev_url = job.stages[i - 1].fal_cdn_url
+                if not prev_url:
+                    raise ValueError(f"No fal URL for previous frame {i - 1}")
+                _, fal_url = await image_gen.image_to_image(
                     prompt=stage.prompt,
                     negative_prompt=stage.negative_prompt,
-                    source_path=prev_path,
+                    source_url=prev_url,
                     local_path=frame_path,
                     strength=stage.img2img_strength,
                 )
+                job.stages[i].fal_cdn_url = fal_url
         except RetryExhausted as e:
             stage.status = StageStatus.FAILED
             job.status = JobStatus.FAILED
