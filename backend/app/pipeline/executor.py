@@ -106,12 +106,19 @@ async def _run_pipeline(job: Job):
         start_path = get_frame_path(job.id, i)
         end_path = get_frame_path(job.id, i + 1)
         clip_path = get_clip_path(job.id, i, i + 1)
+        stage_from = job.stages[i]
+        stage_to = job.stages[i + 1]
+        clip_prompt = (
+            f"Timelapse transition: {stage_from.title} to {stage_to.title}, "
+            "smooth gradual change, time-lapse photography"
+        )
 
         try:
             await video_gen.generate_clip(
                 start_path=start_path,
                 end_path=end_path,
                 local_path=clip_path,
+                prompt=clip_prompt,
                 duration=settings.clip_duration_seconds,
             )
             clip.local_path = str(clip_path)

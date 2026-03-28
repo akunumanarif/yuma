@@ -25,6 +25,7 @@ async def generate_clip(
     start_path: Path,
     end_path: Path,
     local_path: Path,
+    prompt: str,
     duration: int = None,
 ) -> Path:
     if duration is None:
@@ -33,14 +34,13 @@ async def generate_clip(
     logger.info(f"generate_clip: {start_path.name} → {end_path.name}")
 
     start_url = await fal_client.upload_file_async(str(start_path))
-    end_url = await fal_client.upload_file_async(str(end_path))
 
     handler = await fal_client.submit_async(
         "fal-ai/kling-video/v2.1/master/image-to-video",
         arguments={
-            "start_image_url": start_url,
-            "end_image_url": end_url,
-            "duration": str(duration),
+            "prompt": prompt,
+            "image_url": start_url,
+            "duration": int(duration),
             "aspect_ratio": settings.kling_aspect_ratio,
             "cfg_scale": 0.5,
         },
