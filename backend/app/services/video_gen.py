@@ -36,13 +36,10 @@ async def generate_clip(
     start_url = await fal_client.upload_file_async(str(start_path))
 
     handler = await fal_client.submit_async(
-        "fal-ai/kling-video/v2.1/master/image-to-video",
+        "fal-ai/wan/i2v-480p",
         arguments={
             "prompt": prompt,
             "image_url": start_url,
-            "duration": int(duration),
-            "aspect_ratio": settings.kling_aspect_ratio,
-            "cfg_scale": 0.5,
         },
     )
     result = await handler.get()
