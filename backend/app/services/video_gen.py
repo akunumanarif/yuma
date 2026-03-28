@@ -36,7 +36,7 @@ async def generate_clip(
     start_url = await fal_client.upload_file_async(str(start_path))
 
     handler = await fal_client.submit_async(
-        "fal-ai/wan/i2v-480p",
+        "fal-ai/cogvideox-5b/image-to-video",
         arguments={
             "prompt": prompt,
             "image_url": start_url,

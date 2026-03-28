@@ -94,7 +94,8 @@ async def generate_all_frames_with_anchor(
     num_remaining = len(sorted_prompts) - 1
 
     async def _gen_img2img(index: int, prompt: str, position: int) -> tuple[int, Path]:
-        strength = min(0.55 + (position / num_remaining) * 0.20, 0.75)
+        # Start at 0.70 (some room structure preserved), end at 0.90 (dramatic change)
+        strength = min(0.70 + (position / num_remaining) * 0.20, 0.90)
         path = get_frame_path(job_id, index)
         await generate_frame_img2img(prompt, anchor_path, path, strength=strength)
         return index, path
