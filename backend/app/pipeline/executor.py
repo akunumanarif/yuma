@@ -74,11 +74,11 @@ async def _run_pipeline(job: Job):
     # ── Phase 2: ALL FRAMES IN PARALLEL ───────────────────────────────────────
     job.status = JobStatus.GENERATING_FRAMES
     num_stages = len(job.stages)
-    await _emit(job, f"Generating {num_stages} keyframes in parallel...", 15)
+    await _emit(job, f"Generating anchor frame, then {num_stages - 1} matching frames...", 15)
 
     try:
         prompts = [(i, stage.prompt) for i, stage in enumerate(job.stages)]
-        frame_map = await image_gen.generate_all_frames(prompts, job.id)
+        frame_map = await image_gen.generate_all_frames_with_anchor(prompts, job.id)
     except RetryExhausted as e:
         job.status = JobStatus.FAILED
         job.error_message = f"Frame generation failed: {e}"
